@@ -53,7 +53,7 @@ with st.sidebar:
     st.header("⚙️ Configuration")
     selected_model = st.selectbox(
         "Choose Model",
-        ["deepseek-r1:1.5b", "deepseek-r1:3b"],
+        ["deepseek-llm:latest", "huihui_ai/deepseek-r1-abliterated:8b"],
         index=0
     )
     st.divider()
