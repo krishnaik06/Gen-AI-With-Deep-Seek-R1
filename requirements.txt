@@ -1,5 +1,7 @@
-streamlit
-langchain_core
-langchain_community
-langchain_ollama
-pdfplumber
+streamlit>=1.29.0
+langchain>=0.1.0
+langchain-community>=0.0.10
+langchain-core>=0.1.10
+langchain-ollama>=0.0.1
+pdfplumber>=0.10.3
+python-dotenv>=1.0.0

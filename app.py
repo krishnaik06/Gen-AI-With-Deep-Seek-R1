@@ -43,9 +43,19 @@ st.markdown("""
         background-color: #2d2d2d !important;
         color: white !important;
     }
+    
+    /* Think Section Styling */
+    .think-section {
+        color: #666666 !important;
+        font-style: italic !important;
+        font-size: 0.9em !important;
+        border-left: 3px solid #444444 !important;
+        padding-left: 10px !important;
+        margin: 10px 0 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
-st.title("🧠 DeepSeek Code Companion")
+st.title("🧠 DeepSeek Code Companion which runs locally in your browser!")
 st.caption("🚀 Your AI Pair Programmer with Debugging Superpowers")
 
 # Sidebar configuration
@@ -80,8 +90,11 @@ llm_engine=ChatOllama(
 
 # System prompt configuration
 system_prompt = SystemMessagePromptTemplate.from_template(
-    "You are an expert AI coding assistant. Provide concise, correct solutions "
-    "with strategic print statements for debugging. Always respond in English."
+    """You are an expert AI coding assistant. 
+    First, think through the problem and explain your approach (wrap this in <think></think> tags).
+    Then provide your solution with explanations.
+    Include strategic print statements for debugging where relevant.
+    Always respond in English and be concise."""
 )
 
 # Session state management
@@ -95,14 +108,25 @@ chat_container = st.container()
 with chat_container:
     for message in st.session_state.message_log:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            st.markdown(message["content"], unsafe_allow_html=True)
 
 # Chat input and processing
 user_query = st.chat_input("Type your coding question here...")
 
+def format_response(response):
+    if "<think>" in response and "</think>" in response:
+        parts = response.split("</think>", 1)
+        think_part = parts[0].replace("<think>", "").strip()
+        answer_part = parts[1].strip() if len(parts) > 1 else ""
+        return f"""<div class="think-section">{think_part}</div>
+
+{answer_part}"""
+    return response
+
 def generate_ai_response(prompt_chain):
-    processing_pipeline=prompt_chain | llm_engine | StrOutputParser()
-    return processing_pipeline.invoke({})
+    processing_pipeline = prompt_chain | llm_engine | StrOutputParser()
+    response = processing_pipeline.invoke({})
+    return format_response(response)
 
 def build_prompt_chain():
     prompt_sequence = [system_prompt]
