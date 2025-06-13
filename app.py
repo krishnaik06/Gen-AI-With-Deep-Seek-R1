@@ -1,13 +1,18 @@
 import streamlit as st
+import time
+from dataclasses import dataclass
+from typing import List
 from langchain_ollama import ChatOllama
 from langchain_core.output_parsers import StrOutputParser
-
 from langchain_core.prompts import (
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
     AIMessagePromptTemplate,
     ChatPromptTemplate
 )
+
+# Rate limiting configuration
+MAX_REQUESTS_PER_MINUTE = 10
 # Custom CSS styling
 st.markdown("""
 <style>
@@ -68,25 +73,36 @@ with st.sidebar:
     st.markdown("Built with [Ollama](https://ollama.ai/) | [LangChain](https://python.langchain.com/)")
 
 
-# initiate the chat engine
-
-llm_engine=ChatOllama(
+# Initiate the chat engine with proper formatting
+llm_engine = ChatOllama(
     model=selected_model,
     base_url="http://localhost:11434",
-
     temperature=0.3
-
 )
 
 # System prompt configuration
-system_prompt = SystemMessagePromptTemplate.from_template(
-    "You are an expert AI coding assistant. Provide concise, correct solutions "
-    "with strategic print statements for debugging. Always respond in English."
-)
+system_prompt = SystemMessagePromptTemplate.from_template('''\
+You are an expert AI coding assistant. Provide:
+- Concise, correct solutions
+- Strategic print statements for debugging
+- Clear code explanations
+
+Always respond in English and follow PEP8 guidelines.\
+''')
+
+@dataclass
+class ChatMessage:
+    role: str
+    content: str
+    timestamp: float
 
 # Session state management
 if "message_log" not in st.session_state:
-    st.session_state.message_log = [{"role": "ai", "content": "Hi! I'm DeepSeek. How can I help you code today? 💻"}]
+    st.session_state.message_log = [
+        ChatMessage("ai", "Hi! I'm DeepSeek. How can I help you code today? 💻", time.time())
+    ]
+if "last_request" not in st.session_state:
+    st.session_state.last_request = 0
 
 # Chat container
 chat_container = st.container()
@@ -94,28 +110,48 @@ chat_container = st.container()
 # Display chat messages
 with chat_container:
     for message in st.session_state.message_log:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        with st.chat_message(message.role):
+            st.markdown(message.content)
 
 # Chat input and processing
 user_query = st.chat_input("Type your coding question here...")
 
-def generate_ai_response(prompt_chain):
-    processing_pipeline=prompt_chain | llm_engine | StrOutputParser()
-    return processing_pipeline.invoke({})
+def generate_ai_response(prompt_chain: ChatPromptTemplate) -> str:
+    """Generate AI response with error handling."""
+    try:
+        processing_pipeline = prompt_chain | llm_engine | StrOutputParser()
+        return processing_pipeline.invoke({})
+    except Exception as e:
+        return f"Error generating response: {str(e)}"
 
-def build_prompt_chain():
-    prompt_sequence = [system_prompt]
-    for msg in st.session_state.message_log:
-        if msg["role"] == "user":
-            prompt_sequence.append(HumanMessagePromptTemplate.from_template(msg["content"]))
-        elif msg["role"] == "ai":
-            prompt_sequence.append(AIMessagePromptTemplate.from_template(msg["content"]))
+def build_prompt_chain() -> ChatPromptTemplate:
+    """Build conversation-aware prompt chain with type hints."""
+    prompt_sequence = [system_prompt] + [
+        HumanMessagePromptTemplate.from_template(msg.content) 
+        if msg.role == "user" 
+        else AIMessagePromptTemplate.from_template(msg.content)
+        for msg in st.session_state.message_log
+    ]
     return ChatPromptTemplate.from_messages(prompt_sequence)
 
 if user_query:
-    # Add user message to log
-    st.session_state.message_log.append({"role": "user", "content": user_query})
+    # Input validation
+    if not user_query.strip():
+        st.error("Please enter a valid question")
+        st.stop()
+        
+    if len(user_query) > 1000:
+        st.error("Question too long (max 1000 characters)")
+        st.stop()
+
+    # Rate limiting
+    current_time = time.time()
+    if current_time - st.session_state.last_request < 60/MAX_REQUESTS_PER_MINUTE:
+        st.error("Too many requests. Please wait a moment.")
+        st.stop()
+    
+    st.session_state.last_request = current_time
+    st.session_state.message_log.append(ChatMessage("user", user_query, current_time))
     
     # Generate AI response
     with st.spinner("🧠 Processing..."):
@@ -123,7 +159,7 @@ if user_query:
         ai_response = generate_ai_response(prompt_chain)
     
     # Add AI response to log
-    st.session_state.message_log.append({"role": "ai", "content": ai_response})
+    st.session_state.message_log.append(ChatMessage("ai", ai_response, time.time()))
     
     # Rerun to update chat display
     st.rerun()
