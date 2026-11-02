@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from langchain_community.document_loaders import PDFPlumberLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -79,7 +80,7 @@ LANGUAGE_MODEL = OllamaLLM(model="deepseek-r1:1.5b")
 
 
 def save_uploaded_file(uploaded_file):
-    file_path = PDF_STORAGE_PATH + uploaded_file.name
+    file_path = PDF_STORAGE_PATH + os.path.basename(uploaded_file.name)
     with open(file_path, "wb") as file:
         file.write(uploaded_file.getbuffer())
     return file_path
